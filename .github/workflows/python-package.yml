@@ -38,14 +38,3 @@ jobs:
     - name: Test with pytest
       run: |
         python -m pytest -v -s tests/
-    - name: Build distribution test.pypi.org
-      run: |
-        python setup.py sdist bdist_wheel
-    - name: push distribution to Test PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        skip_existing: true
-        repository_url: https://test.pypi.org/legacy/
-
