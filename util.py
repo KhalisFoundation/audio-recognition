@@ -10,8 +10,12 @@ from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 
 
-DATA_PATH = "data.json"
+TRAIN_DATA_PATH = "train_data.json"
+TEST_DATA_PATH = "test_data.json"
+
 SAVED_MODEL_PATH = "model.h5"
+SAVED_JS_MODEL_PATH = "js_model.h5"
+
 EPOCHS = 100
 BATCH_SIZE = 32
 PATIENCE = 10
@@ -29,7 +33,7 @@ LABELS = [
     "akaalmoorat"
 ]
 
-def load_data(data_path):
+def load_data(data_path, test_only=False):
     """Loads training dataset from json file.
 
     :param data_path (str): Path to json file containing data
@@ -42,16 +46,20 @@ def load_data(data_path):
 
     X = np.array(data["MFCCs"])
     y = np.array(data["labels"])
-    print("Training sets loaded!")
+    if test_only == False:
+        print("Training sets loaded!")
+    else:
+        print("Testing sets loaded!")
     return X, y
 
 
-def prepare_dataset(data_path, test_size=0.1, validation_size=0.1):
+def prepare_dataset(data_path, test_size=0.1, validation_size=0.1, test_only=False):
     """Creates train, validation and test sets.
 
     :param data_path (str): Path to json file containing data
     :param test_size (flaot): Percentage of dataset used for testing
     :param validation_size (float): Percentage of train set used for cross-validation
+    :param test_only (boolean): Process only test data
 
     :return X_train (ndarray): Inputs for the train set
     :return y_train (ndarray): Targets for the train set
@@ -62,18 +70,21 @@ def prepare_dataset(data_path, test_size=0.1, validation_size=0.1):
     """
 
     # load dataset
-    X, y = load_data(data_path)
-
-    # create train, validation, test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
-    X_train, X_validation, y_train, y_validation = train_test_split(X_train, y_train, test_size=validation_size)
+    X, y = load_data(data_path, test_only=test_only)
+    
+    if test_only:
+        return X, y
+        
+    # create train, validation split
+    X_train, X_validation, y_train, y_validation = train_test_split(X, y, test_size=validation_size)
 
     # add an axis to nd array
     X_train = X_train[..., np.newaxis]
-    X_test = X_test[..., np.newaxis]
     X_validation = X_validation[..., np.newaxis]
+    
 
-    return X_train, y_train, X_validation, y_validation, X_test, y_test
+    return X_train, y_train, X_validation, y_validation
+        
 
 
 def build_model(input_shape, loss="sparse_categorical_crossentropy", learning_rate=0.0001):
