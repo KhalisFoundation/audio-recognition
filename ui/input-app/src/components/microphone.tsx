@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ReactMic } from 'react-mic';
 import { MicrophoneContainer, StartButton, StopButton } from './microphone.styled';
+import axios from 'axios';
 
 export const Microphone = () => {
   const [recordingAudio, setRecordingAudio] = React.useState<boolean>(false);
@@ -15,14 +16,28 @@ export const Microphone = () => {
     setRecordingAudio(false);
   };
 
-  const onStopRecording = (recordedBlob: any) => {
-    console.log('recordedBlob is: ', recordedBlob);
+  const onStopRecording = async (recordedBlob: { blob: Blob, startTime: number, stopTime: number, blobURL: string } ) => {
+    const timeLength = (recordedBlob.stopTime - recordedBlob.startTime) / 1000;
+    // console.log('recordedBlob is: ', recordedBlob);
+    console.log('Recording length (s): ', timeLength);
+    
+    
+    const data = new FormData();
+    data.append('recording', recordedBlob.blob, "recordedAudio");
+    const response = await axios.post('http://localhost:4000/classify', data, {
+      headers : {
+        'Content-Type' : 'audio/wav'
+      }
+    });
+    console.log(response.data);
+    // TODO: do something with the response. 
+
     setAudioExists(true);
-    // TODO: make Ajax request to express server and save file as .wav to pass to python module.
   };
 
+
   const onData = (recordedBlob: any) => {
-    console.log('chunk of real-time data is: ', recordedBlob);
+    // console.log('chunk of real-time data is: ', recordedBlob);
   };
 
   return (
