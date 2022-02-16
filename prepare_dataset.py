@@ -188,7 +188,20 @@ def remove_augmented_files(dataset_path):
                 elif "random_gain" in f:
                     os.remove(os.path.join(dataset_path, label, f))
 
+def preprocess_single_file(file_path, num_mfcc=13, n_fft=2048, hop_length=512):
+    signal, sample_rate = librosa.load(file_path)
+    if len(signal) >= SAMPLES_TO_CONSIDER:
+        # ensure consistency of the length of the signal
+        signal = signal[:SAMPLES_TO_CONSIDER]
 
+        # extract MFCCs
+        MFCCs = librosa.feature.mfcc(y=signal, sr=sample_rate, n_mfcc=num_mfcc, n_fft=n_fft,
+                                    hop_length=hop_length)
+        
+        return np.array([MFCCs.T.tolist()])
+    
+    return None  
+    
 def preprocess_dataset(dataset_path, json_path, split, num_mfcc=13, n_fft=2048, hop_length=512):
     """Extracts MFCCs from music dataset and saves them into a json file.
 
