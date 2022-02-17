@@ -1,14 +1,17 @@
+import os
 import json
 import librosa
-import numpy as np
-import os
-import soundfile as sf
 import subprocess
-
+import numpy as np
 from os import path
+import soundfile as sf
 
-DATASET_PATH = "dataset"
-JSON_PATH = "data.json"
+
+TRAIN_DATASET_PATH = "dataset"
+TESTING_DATASET_PATH = "testing_dataset"
+TRAIN_JSON_PATH = "train_data.json"
+TESTING_JSON_PATH = "test_data.json"
+PATH_TO_FFMPEG = "/Users/goonmeetbajaj/Documents/Projects/audio/ffmpeg"
 SAMPLES_TO_CONSIDER = 22050 # 1 sec. of audio
 
 
@@ -24,7 +27,7 @@ def time_stretch(signal, min_factor=0.8, max_factor=1.2):
     https://librosa.org/doc/main/generated/librosa.effects.pitch_shift.html?highlight=pitch%20shift#librosa.effects.pitch_shift
     """
     time_stretch_rate = np.random.uniform(min_factor, max_factor)
-    return librosa.effects.time_stretch(signal, time_stretch_rate)
+    return librosa.effects.time_stretch(signal, rate=time_stretch_rate)
 
 
 def pitch_scale(signal, sr, min_factor=2, max_factor=3):
@@ -32,7 +35,7 @@ def pitch_scale(signal, sr, min_factor=2, max_factor=3):
     https://librosa.org/doc/main/generated/librosa.effects.pitch_shift.html?highlight=pitch%20shift#librosa.effects.pitch_shift
     """
     num_semitones = np.random.uniform(min_factor, max_factor)
-    return librosa.effects.pitch_shift(signal, sr, num_semitones)
+    return librosa.effects.pitch_shift(signal, sr=sr, n_steps=num_semitones)
 
 
 def random_gain(signal, min_factor=0.1, max_factor=1.2):
@@ -44,6 +47,47 @@ def random_gain(signal, min_factor=0.1, max_factor=1.2):
 def invert_polarity(signal):
     return signal * -1
 
+def convert_to_wav_dataset(dataset_path):
+    # loop through all sub-dirs
+    count = 0
+    for i, (dirpath, dirnames, filenames) in enumerate(os.walk(dataset_path)):
+
+        # ensure we're at sub-folder level
+        if dirpath is not dataset_path:
+
+            # save label (i.e., sub-folder name) in the mapping
+            label = dirpath.split("/")[-1]
+            print(f"Convert to wav: {label}")
+
+            new_filenames = []
+
+            # If not wav, rename - replace spaces, - with _
+            # Convert to wav
+            for f in filenames:
+                if not f[0] == '.':
+                    name , extension = path.splitext(f)
+
+                    if extension != '.wav':
+                        original_file = os.path.join(dirpath, f)
+
+                        name = name.replace(" ", "_")
+                        name = name.replace("-", "_")
+                        name = name.replace("(", "_")
+                        name = name.replace(")", "_")
+
+                        new_name = f"{name}{extension}"
+                        renamed_file = os.path.join(dirpath, new_name)
+                        os.rename(original_file, renamed_file)
+
+                        output_file = os.path.join(dirpath, f"{name}.wav")
+
+                        ffmpeg_cmd = f"{PATH_TO_FFMPEG} -i {renamed_file} {output_file}"
+
+                        subprocess.run(ffmpeg_cmd, check=True, shell=True)
+
+                        os.remove(renamed_file)
+
+                    new_filenames.append(f"{name}.wav")
 
 def augment_dataset(dataset_path):
     # loop through all sub-dirs
@@ -79,7 +123,7 @@ def augment_dataset(dataset_path):
 
                         output_file = os.path.join(dirpath, f"{name}.wav")
 
-                        ffmpeg_cmd = f"ffmpeg -hide_banner -loglevel panic -i {renamed_file} -y {output_file}"
+                        ffmpeg_cmd = f"{PATH_TO_FFMPEG} -hide_banner -loglevel panic -i {renamed_file} -y {output_file}"
 
                         subprocess.run(ffmpeg_cmd, check=True, shell=True)
 
@@ -120,8 +164,45 @@ def augment_dataset(dataset_path):
     print(f"Augmented files: {5 * count}")
     print(f"Total files: {6 * count}")
 
+def remove_augmented_files(dataset_path):
+    for i, (dirpath, dirnames, filenames) in enumerate(os.walk(dataset_path)):
 
-def preprocess_dataset(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_length=512):
+        # ensure we're at sub-folder level
+        if dirpath is not dataset_path:
+
+            # save label (i.e., sub-folder name) in the mapping
+            label = dirpath.split("/")[-1]
+            #data["mapping"].append(label)
+            print("\nRemoving augmented files from: '{}'".format(label))
+
+            # process all audio files in sub-dir and store MFCCs
+            for f in filenames:
+                if "white_noise" in f:
+                    os.remove(os.path.join(dataset_path, label, f))
+                elif "time_stretch" in f:
+                    os.remove(os.path.join(dataset_path, label, f))
+                elif "pitch_scale" in f:
+                    os.remove(os.path.join(dataset_path, label, f))
+                elif "invert_polarity" in f:
+                    os.remove(os.path.join(dataset_path, label, f))
+                elif "random_gain" in f:
+                    os.remove(os.path.join(dataset_path, label, f))
+
+def preprocess_single_file(file_path, num_mfcc=13, n_fft=2048, hop_length=512):
+    signal, sample_rate = librosa.load(file_path)
+    if len(signal) >= SAMPLES_TO_CONSIDER:
+        # ensure consistency of the length of the signal
+        signal = signal[:SAMPLES_TO_CONSIDER]
+
+        # extract MFCCs
+        MFCCs = librosa.feature.mfcc(y=signal, sr=sample_rate, n_mfcc=num_mfcc, n_fft=n_fft,
+                                    hop_length=hop_length)
+        
+        return np.array([MFCCs.T.tolist()])
+    
+    return None  
+    
+def preprocess_dataset(dataset_path, json_path, split, num_mfcc=13, n_fft=2048, hop_length=512):
     """Extracts MFCCs from music dataset and saves them into a json file.
 
     :param dataset_path (str): Path to dataset
@@ -167,7 +248,7 @@ def preprocess_dataset(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_len
                         signal = signal[:SAMPLES_TO_CONSIDER]
 
                         # extract MFCCs
-                        MFCCs = librosa.feature.mfcc(signal, sample_rate, n_mfcc=num_mfcc, n_fft=n_fft,
+                        MFCCs = librosa.feature.mfcc(y=signal, sr=sample_rate, n_mfcc=num_mfcc, n_fft=n_fft,
                                                     hop_length=hop_length)
 
                         # store data for analysed track
@@ -177,7 +258,7 @@ def preprocess_dataset(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_len
                         # print("{}: {}".format(file_path, i-1))
                         count = count + 1
 
-            print(f"Training samples: {count}")
+            print(f"{split} samples: {count}")
 
     # save data in json file
     with open(json_path, "w") as fp:
@@ -185,5 +266,9 @@ def preprocess_dataset(dataset_path, json_path, num_mfcc=13, n_fft=2048, hop_len
 
 
 if __name__ == "__main__":
-    augment_dataset(DATASET_PATH)
-    preprocess_dataset(DATASET_PATH, JSON_PATH)
+    remove_augmented_files(TRAIN_DATASET_PATH)
+    augment_dataset(TRAIN_DATASET_PATH)
+    preprocess_dataset(TRAIN_DATASET_PATH, TRAIN_JSON_PATH, "Train")
+
+    convert_to_wav_dataset(TESTING_DATASET_PATH)
+    preprocess_dataset(TESTING_DATASET_PATH, TESTING_JSON_PATH, "Test")
