@@ -156,3 +156,5 @@ cython_debug/
 .idea/
 
 node_modules/
+
+_generated_upload/
