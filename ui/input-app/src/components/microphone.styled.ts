@@ -26,6 +26,16 @@ ${buttonCommon}
   background-color: #fff;
 `;
 
-export const MicrophoneContainer = styled.div`
+export const MicrophoneContainer = styled.div<{ recording?: boolean }>`
   border: solid 2px #000;
+  border-radius: 100px;
+  width: 100px;
+  height: 100px;
+
+  canvas {
+    ${({ recording }) => recording ? 'visibility: visiable;' : 'visibility: hidden;'}
+    border-radius: 100px;
+    width: 100px;
+    height: 100px;
+  }
 `;

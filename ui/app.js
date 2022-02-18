@@ -2,7 +2,18 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 const multer = require('multer');
-const upload = multer({ dest: '_generated_upload/' });
+const spawn = require('child_process').spawn;
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, '_generated_upload/')
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '.webm')
+    }
+})
+
+const upload = multer({ storage: storage });
 const bodyParser = require('body-parser')
 const fs = require('fs');
 
@@ -15,48 +26,44 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 // for parsing application/json
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.raw({ type: 'audio/wav', limit: '50mb' }));
+app.use(bodyParser.json({ limit: '500mb' }));
+app.use(bodyParser.raw({ type: 'audio/webm', limit: '500mb' }));
 
-// let runPy = new Promise(function(success, nosuccess) {
-//     const { spawn } = require('child_process');
-//     const pyprog = spawn('python3', ['app.py']);
-//     pyprog.stdout.on('data', function(data) {
-//         success(data);
-//     });
-//     pyprog.stderr.on('data', (data) => {
-//         nosuccess(data);
-//     });
-// });
+let convertFile = (file, output, onFinish) => {
+    const { spawn } = require('child_process');
+    const proc = spawn('ffmpeg', ['-i', file, output]);
+
+    proc.on('close', onFinish);
+};
+
+let getInference = (waveFile, success) => {
+    const { spawn } = require('child_process');
+    const pyprog = spawn('python3', ['../test_audio.py', waveFile]);
+    pyprog.stdout.on('data', function (data) {
+        success(data.toString());
+    });
+};
 
 app.get('/', (req, res) => {
     res.send('Fateh');
 })
 
-app.post('/classify', type, (req, res) => {
-    console.log("RECIEVED AUDIO: ", req.file);
-    res.send(`Recorded and saved ${req.file.originalname}`);
+app.post('/classify', type, async (req, res) => {
+    const file = req.file;
 
-    // /** When using the "single"
-    //   data come in "req.file" regardless of the attribute "name". **/
-    // const tmp_path = req.file.path;
+    console.log("RECIEVED AUDIO: ", file);
 
-    // /** The original name of the uploaded file
-    //     stored in the variable "originalname". **/
-    // const target_path = 'uploads/' + req.file.originalname;
-
-    // /** A better way to copy the uploaded file. **/
-    // const src = fs.createReadStream(tmp_path);
-    // const dest = fs.createWriteStream(target_path);
-    // src.pipe(dest);
-    // src.on('end', function () { res.render('complete'); });
-    // src.on('error', function (err) { res.render('error'); });
-
-
-    // runPy.then(function(fromRunpy) {
-    //     console.log(fromRunpy.toString());
-    //     res.end(fromRunpy);
-    // });
+    const waveFile = `${file.destination}${Date.now() + '.wav'}`;
+    convertFile(file.path, waveFile, () => {
+        console.log("created: ", waveFile);
+        getInference(waveFile, (data) => {
+            console.log(data);
+            const match = data.split(", ")[0].split("'")[1];
+            const confidence = Number.parseFloat(data.split(", ")[1].split(")")[0])*100;
+            // console.log(`Recorded and saved ${req.file.originalname}`);
+            res.send({ match: match, confidence: confidence, message: `Recorded and saved ${req.file.originalname}` });
+        });
+    });
 })
 
 app.listen(4000, () => console.log('Application listening on port 4000!'))
