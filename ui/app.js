@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
 app.post('/classify', type, async (req, res) => {
     const file = req.file;
 
-    console.log("RECIEVED AUDIO: ", file);
+    console.log("RECEIVED AUDIO: ", file);
 
     const waveFile = `${file.destination}${Date.now() + '.wav'}`;
     convertFile(file.path, waveFile, () => {
@@ -59,7 +59,7 @@ app.post('/classify', type, async (req, res) => {
         getInference(waveFile, (data) => {
             console.log(data);
             const match = data.split(", ")[0].split("'")[1];
-            const confidence = Number.parseFloat(data.split(", ")[1].split(")")[0])*100;
+            const confidence = Number((Number.parseFloat(data.split(", ")[1].split(")")[0])*100).toFixed(2));
             // console.log(`Recorded and saved ${req.file.originalname}`);
             res.send({ match: match, confidence: confidence, message: `Recorded and saved ${req.file.originalname}` });
         });
